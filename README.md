@@ -1,6 +1,6 @@
 # Finance Data Processing and Access Control Backend
 
-A production-grade RESTful API for managing financial records, user roles, and dashboard analytics — built with **Node.js**, **Express**, **SQLite**, and **JWT authentication**.
+A production-grade RESTful API for managing financial records, user roles, and dashboard analytics — built with **Node.js**, **Express**, **MySQL**, and **JWT authentication**.
 
 ---
 
@@ -9,7 +9,7 @@ A production-grade RESTful API for managing financial records, user roles, and d
 - **Role-Based Access Control** — Three-tier permission system (Admin, Analyst, Viewer)
 - **Financial Records CRUD** — Create, read, update, soft-delete, and restore transactions
 - **Dashboard Analytics** — Income/expense summaries, category breakdowns, monthly trends
-- **JWT Authentication** — Short-lived access tokens (15 min) + refresh token rotation (7 days)
+- **JWT Authentication** — Configurable access token expiry + refresh token rotation
 - **Input Validation** — Schema-strict payload validation on every endpoint via Joi
 - **Soft Deletes** — Data is never permanently lost; restore endpoints available
 - **Structured Logging** — Pino logger with pretty dev output and JSON production logs
@@ -25,7 +25,7 @@ A production-grade RESTful API for managing financial records, user roles, and d
 |---|---|
 | Runtime | Node.js (>=18) + JavaScript ES Modules |
 | Framework | Express.js |
-| Database | SQLite via better-sqlite3 |
+| Database | MySQL (via mysql2) |
 | Auth | JWT (jsonwebtoken) + bcrypt |
 | Validation | Joi |
 | Logging | Pino + pino-http |
@@ -40,6 +40,7 @@ A production-grade RESTful API for managing financial records, user roles, and d
 
 - Node.js v18 or higher
 - npm
+- MySQL server (e.g. XAMPP, Docker, or standalone)
 
 ### Installation
 
@@ -59,6 +60,9 @@ cp .env.example .env
 ### Database Setup
 
 ```bash
+# Create the initial database in your MySQL instance:
+# CREATE DATABASE finance_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 # Run migrations (creates tables)
 npm run db:migrate
 
@@ -156,8 +160,15 @@ Use the **Authorize** button to paste your JWT Bearer token and test endpoints d
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `PORT` | No | `3000` | Server port |
-| `DATABASE_URL` | No | `finance.db` | SQLite database file path |
+| `DB_HOST` | No | `localhost` | MySQL host |
+| `DB_PORT` | No | `3306` | MySQL port |
+| `DB_USER` | No | `root` | MySQL user |
+| `DB_PASSWORD` | No | `''` | MySQL password |
+| `DB_NAME` | No | `finance_db` | MySQL database name |
 | `JWT_SECRET` | **Yes** | — | Secret key for signing JWTs |
+| `BCRYPT_SALT_ROUNDS` | No | `10` | Password hashing cost factor (increase for production) |
+| `ACCESS_TOKEN_EXPIRY` | No | `15m` | JWT access token lifetime |
+| `REFRESH_TOKEN_EXPIRY_DAYS` | No | `7` | Refresh token validity in days |
 | `NODE_ENV` | No | `development` | Environment (`development`, `production`, `test`) |
 | `ALLOWED_ORIGINS` | No | `localhost` | Comma-separated CORS origins (production) |
 
@@ -177,21 +188,17 @@ Use the **Authorize** button to paste your JWT Bearer token and test endpoints d
 
 ## Assumptions & Design Decisions
 
-1. **SQLite with raw SQL** was chosen over an ORM to demonstrate direct SQL proficiency and schema design.
+1. **MySQL with raw SQL** via `mysql2/promise` was chosen over an ORM to demonstrate direct SQL proficiency and schema design.
 2. **Soft deletes** are implemented using `deleted_at` timestamps — data is never permanently destroyed. Dedicated restore endpoints exist for recovery.
-3. **Access tokens expire in 15 minutes** with a 7-day refresh token flow stored in the database, enabling secure token revocation.
-4. **No external HTTP client** (e.g., axios) is needed since this is a pure API server.
-5. **Versioned migrations** are tracked in a `_migrations` table to ensure schema changes are idempotent and auditable.
-6. **Admin self-deletion is blocked** to prevent accidental system lockout.
+3. **Auth token lifetimes are environment-configurable** via `.env` (`ACCESS_TOKEN_EXPIRY`, `REFRESH_TOKEN_EXPIRY_DAYS`) so dev and production can differ without code changes.
+4. **Structural constants** (pagination limits, dashboard defaults) live in `src/utils/constants.js` as they define the API contract, not deployment config.
+5. **No external HTTP client** (e.g., axios) is needed since this is a pure API server.
+6. **Versioned migrations** are tracked in a `_migrations` table to ensure schema changes are idempotent and auditable.
+7. **Admin self-deletion is blocked** to prevent accidental system lockout.
 
 ---
 
 ## Project Structure
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for a detailed breakdown of the project's architecture and module design.
+See [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for a detailed breakdown of the project's architecture, database schema, and module design.
 
----
-
-## License
-
-This project is for evaluation purposes.

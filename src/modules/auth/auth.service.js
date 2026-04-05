@@ -1,21 +1,20 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'node:crypto';
-import db from '../../config/database.js';
+import pool from '../../config/database.js';
 import { env } from '../../config/environment.js';
 import { UnauthorizedError, ConflictError } from '../../utils/app-error.js';
+import { AUTH } from '../../utils/constants.js';
 
-const ACCESS_TOKEN_EXPIRY = '15m';
-const REFRESH_TOKEN_EXPIRY_DAYS = 7;
-
-const generateRefreshToken = (userId) => {
-  const token = crypto.randomBytes(40).toString('hex');
+const generateRefreshToken = async (userId) => {
+  const token = crypto.randomBytes(AUTH.REFRESH_TOKEN_BYTES).toString('hex');
   const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRY_DAYS);
+  expiresAt.setDate(expiresAt.getDate() + env.auth.refreshTokenExpiryDays);
 
-  db.prepare(
-    'INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)'
-  ).run(userId, token, expiresAt.toISOString());
+  await pool.execute(
+    'INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)',
+    [userId, token, expiresAt.toISOString().slice(0, 19).replace('T', ' ')]
+  );
 
   return token;
 };
@@ -23,7 +22,8 @@ const generateRefreshToken = (userId) => {
 export const registerUser = async (userData) => {
   const { email, password, name, role } = userData;
 
-  const existingUser = db.prepare('SELECT id, deleted_at FROM users WHERE email = ?').get(email);
+  const [users] = await pool.execute('SELECT id, deleted_at FROM users WHERE email = ?', [email]);
+  const existingUser = users[0];
   if (existingUser && !existingUser.deleted_at) {
     throw new ConflictError('Email already in use');
   }
@@ -31,25 +31,26 @@ export const registerUser = async (userData) => {
     throw new ConflictError('Email belongs to a deactivated account. Contact an administrator.');
   }
 
-  const passwordHash = await bcrypt.hash(password, 10);
+  const passwordHash = await bcrypt.hash(password, env.auth.bcryptSaltRounds);
   
-  const insertUser = db.prepare(
-    'INSERT INTO users (email, password_hash, name, role) VALUES (?, ?, ?, ?)'
+  const [result] = await pool.execute(
+    'INSERT INTO users (email, password_hash, name, role) VALUES (?, ?, ?, ?)',
+    [email, passwordHash, name, role || 'VIEWER']
   );
   
-  const info = insertUser.run(email, passwordHash, name, role || 'VIEWER');
+  const [newUsers] = await pool.execute('SELECT id, email, name, role, is_active, created_at FROM users WHERE id = ?', [result.insertId]);
   
-  const newUser = db.prepare('SELECT id, email, name, role, is_active, created_at FROM users WHERE id = ?').get(info.lastInsertRowid);
-  
-  return newUser;
+  return newUsers[0];
 };
 
 export const loginUser = async (credentials) => {
   const { email, password } = credentials;
 
-  const user = db.prepare(
-    'SELECT id, email, name, role, password_hash, is_active FROM users WHERE email = ? AND deleted_at IS NULL'
-  ).get(email);
+  const [users] = await pool.execute(
+    'SELECT id, email, name, role, password_hash, is_active FROM users WHERE email = ? AND deleted_at IS NULL',
+    [email]
+  );
+  const user = users[0];
   
   if (!user || user.is_active === 0) {
     throw new UnauthorizedError('Invalid credentials or inactive account');
@@ -64,10 +65,10 @@ export const loginUser = async (credentials) => {
   const accessToken = jwt.sign(
     { id: user.id, email: user.email, role: user.role },
     env.jwtSecret,
-    { expiresIn: ACCESS_TOKEN_EXPIRY }
+    { expiresIn: env.auth.accessTokenExpiry }
   );
 
-  const refreshToken = generateRefreshToken(user.id);
+  const refreshToken = await generateRefreshToken(user.id);
 
   return {
     user: { id: user.id, email: user.email, name: user.name, role: user.role },
@@ -76,17 +77,19 @@ export const loginUser = async (credentials) => {
   };
 };
 
-export const refreshAccessToken = (refreshToken) => {
-  const stored = db.prepare(
-    'SELECT rt.*, u.id as uid, u.email, u.role, u.is_active FROM refresh_tokens rt JOIN users u ON rt.user_id = u.id WHERE rt.token = ?'
-  ).get(refreshToken);
+export const refreshAccessToken = async (refreshToken) => {
+  const [tokens] = await pool.execute(
+    'SELECT rt.*, u.id as uid, u.email, u.role, u.is_active FROM refresh_tokens rt JOIN users u ON rt.user_id = u.id WHERE rt.token = ?',
+    [refreshToken]
+  );
+  const stored = tokens[0];
 
   if (!stored) {
     throw new UnauthorizedError('Invalid refresh token');
   }
 
   if (new Date(stored.expires_at) < new Date()) {
-    db.prepare('DELETE FROM refresh_tokens WHERE token = ?').run(refreshToken);
+    await pool.execute('DELETE FROM refresh_tokens WHERE token = ?', [refreshToken]);
     throw new UnauthorizedError('Refresh token expired');
   }
 
@@ -97,19 +100,18 @@ export const refreshAccessToken = (refreshToken) => {
   const accessToken = jwt.sign(
     { id: stored.uid, email: stored.email, role: stored.role },
     env.jwtSecret,
-    { expiresIn: ACCESS_TOKEN_EXPIRY }
+    { expiresIn: env.auth.accessTokenExpiry }
   );
 
   return { accessToken };
 };
 
-export const logoutUser = (refreshToken) => {
-  db.prepare('DELETE FROM refresh_tokens WHERE token = ?').run(refreshToken);
+export const logoutUser = async (refreshToken) => {
+  await pool.execute('DELETE FROM refresh_tokens WHERE token = ?', [refreshToken]);
   return { loggedOut: true };
 };
 
-export const revokeUserTokens = (userId) => {
-  db.prepare('DELETE FROM refresh_tokens WHERE user_id = ?').run(userId);
+export const revokeUserTokens = async (userId) => {
+  await pool.execute('DELETE FROM refresh_tokens WHERE user_id = ?', [userId]);
   return { revoked: true };
 };
-

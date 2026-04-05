@@ -1,6 +1,7 @@
-import db from '../../config/database.js';
+import pool from '../../config/database.js';
+import { DASHBOARD } from '../../utils/constants.js';
 
-export const getSummary = () => {
+export const getSummary = async () => {
   const query = `
     SELECT 
       SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END) as totalIncome,
@@ -9,9 +10,10 @@ export const getSummary = () => {
     WHERE deleted_at IS NULL
   `;
   
-  const result = db.prepare(query).get();
-  const totalIncome = result.totalIncome || 0;
-  const totalExpenses = result.totalExpenses || 0;
+  const [rows] = await pool.execute(query);
+  const result = rows[0];
+  const totalIncome = result.totalIncome ? Number(result.totalIncome) : 0;
+  const totalExpenses = result.totalExpenses ? Number(result.totalExpenses) : 0;
   
   return {
     totalIncome,
@@ -20,7 +22,7 @@ export const getSummary = () => {
   };
 };
 
-export const getCategoryBreakdown = () => {
+export const getCategoryBreakdown = async () => {
   const query = `
     SELECT category, type, SUM(amount) as total
     FROM financial_records
@@ -29,27 +31,28 @@ export const getCategoryBreakdown = () => {
     ORDER BY total DESC
   `;
   
-  return db.prepare(query).all();
+  const [rows] = await pool.execute(query);
+  return rows.map(r => ({ ...r, total: Number(r.total) }));
 };
 
-export const getTrends = () => {
-  // SQLite strftime for month grouping
+export const getTrends = async () => {
   const query = `
     SELECT 
-      strftime('%Y-%m', date) as month,
+      DATE_FORMAT(date, '%Y-%m') as month,
       SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END) as income,
       SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END) as expense
     FROM financial_records
     WHERE deleted_at IS NULL
-    GROUP BY strftime('%Y-%m', date)
+    GROUP BY DATE_FORMAT(date, '%Y-%m')
     ORDER BY month ASC
-    LIMIT 12
+    LIMIT ${DASHBOARD.TRENDS_MONTH_LIMIT}
   `;
   
-  return db.prepare(query).all();
+  const [rows] = await pool.execute(query);
+  return rows.map(r => ({ ...r, income: Number(r.income), expense: Number(r.expense) }));
 };
 
-export const getRecentActivity = (limit = 5) => {
+export const getRecentActivity = async (limit = DASHBOARD.RECENT_ACTIVITY_DEFAULT_LIMIT) => {
   const query = `
     SELECT id, amount, type, category, date, description
     FROM financial_records
@@ -58,5 +61,6 @@ export const getRecentActivity = (limit = 5) => {
     LIMIT ?
   `;
   
-  return db.prepare(query).all(limit);
+  const [rows] = await pool.query(query, [Number(limit)]);
+  return rows;
 };

@@ -1,32 +1,33 @@
-import db from '../../config/database.js';
+import pool from '../../config/database.js';
 import { NotFoundError, ConflictError } from '../../utils/app-error.js';
 
 const UPDATABLE_RECORD_COLUMNS = ['amount', 'type', 'category', 'date', 'description'];
 
 const toSqlValue = (value) => {
   if (value === undefined) return null;
-  if (value instanceof Date) return value.toISOString();
+  if (value instanceof Date) return value.toISOString().split('T')[0];
   return value;
 };
 
-export const createRecord = (data, userId) => {
-  const insert = db.prepare(`
+export const createRecord = async (data, userId) => {
+  const sql = `
     INSERT INTO financial_records (amount, type, category, date, description, user_id)
     VALUES (?, ?, ?, ?, ?, ?)
-  `);
+  `;
   
-  const info = insert.run(
+  const [result] = await pool.execute(sql, [
     data.amount,
     data.type,
     data.category,
     toSqlValue(data.date),
     toSqlValue(data.description),
     userId
-  );
-  return getRecordById(info.lastInsertRowid);
+  ]);
+  
+  return getRecordById(result.insertId);
 };
 
-export const getRecords = (filters) => {
+export const getRecords = async (filters) => {
   let query = 'SELECT * FROM financial_records WHERE deleted_at IS NULL';
   const queryParams = [];
   
@@ -52,37 +53,38 @@ export const getRecords = (filters) => {
   }
   
   // Count total for pagination
-  const countQuery = `SELECT COUNT(*) as total FROM (${query})`;
-  const totalObject = db.prepare(countQuery).get(...queryParams);
-  const total = totalObject.total;
+  const countQuery = `SELECT COUNT(*) as total FROM (${query}) AS subquery`;
+  const [countRows] = await pool.execute(countQuery, queryParams);
+  const total = countRows[0].total;
   
   // Pagination
   query += ' ORDER BY date DESC LIMIT ? OFFSET ?';
-  queryParams.push(filters.limit, (filters.page - 1) * filters.limit);
+  queryParams.push(Number(filters.limit), Number((filters.page - 1) * filters.limit));
   
-  const records = db.prepare(query).all(...queryParams);
+  const [records] = await pool.query(query, queryParams);
   
   return {
     data: records,
     meta: {
       total,
-      page: filters.page,
-      limit: filters.limit,
+      page: Number(filters.page),
+      limit: Number(filters.limit),
       totalPages: Math.ceil(total / filters.limit)
     }
   };
 };
 
-export const getRecordById = (id) => {
-  const record = db.prepare('SELECT * FROM financial_records WHERE id = ? AND deleted_at IS NULL').get(id);
+export const getRecordById = async (id) => {
+  const [records] = await pool.execute('SELECT * FROM financial_records WHERE id = ? AND deleted_at IS NULL', [id]);
+  const record = records[0];
   if (!record) {
     throw new NotFoundError(`Financial record with id ${id} not found`);
   }
   return record;
 };
 
-export const updateRecord = (id, data) => {
-  getRecordById(id);
+export const updateRecord = async (id, data) => {
+  await getRecordById(id);
   
   const updates = [];
   const params = [];
@@ -98,30 +100,30 @@ export const updateRecord = (id, data) => {
     return getRecordById(id);
   }
   
-  updates.push('updated_at = CURRENT_TIMESTAMP');
   params.push(id);
   
   const sql = `UPDATE financial_records SET ${updates.join(', ')} WHERE id = ? AND deleted_at IS NULL`;
-  db.prepare(sql).run(...params);
+  await pool.execute(sql, params);
   
   return getRecordById(id);
 };
 
-export const deleteRecord = (id) => {
-  getRecordById(id);
+export const deleteRecord = async (id) => {
+  await getRecordById(id);
   
-  db.prepare("UPDATE financial_records SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(id);
+  await pool.execute("UPDATE financial_records SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?", [id]);
   return { id, deleted: true };
 };
 
-export const restoreRecord = (id) => {
-  const record = db.prepare('SELECT id, deleted_at FROM financial_records WHERE id = ?').get(id);
+export const restoreRecord = async (id) => {
+  const [records] = await pool.execute('SELECT id, deleted_at FROM financial_records WHERE id = ?', [id]);
+  const record = records[0];
   if (!record) {
     throw new NotFoundError(`Financial record with id ${id} not found`);
   }
   if (!record.deleted_at) {
     throw new ConflictError('Record is not deleted');
   }
-  db.prepare("UPDATE financial_records SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(id);
+  await pool.execute("UPDATE financial_records SET deleted_at = NULL WHERE id = ?", [id]);
   return getRecordById(id);
 };

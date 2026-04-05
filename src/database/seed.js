@@ -1,6 +1,7 @@
 import bcrypt from 'bcrypt';
-import db from '../config/database.js';
+import pool from '../config/database.js';
 import logger from '../utils/logger.js';
+import { env } from '../config/environment.js';
 
 const daysAgo = (days) => {
   const date = new Date();
@@ -11,41 +12,63 @@ const daysAgo = (days) => {
 const seed = async () => {
   logger.info('Starting database seed...');
 
-  const passwordHash = await bcrypt.hash('password123', 10);
+  const passwordHash = await bcrypt.hash('password123', env.auth.bcryptSaltRounds);
 
-  const runSeed = db.transaction(() => {
-    db.exec('DELETE FROM financial_records; DELETE FROM users;');
+  try {
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
 
-    const insertUser = db.prepare(
-      'INSERT INTO users (email, password_hash, name, role) VALUES (?, ?, ?, ?)'
-    );
+    try {
+      // Clear existing records in proper order to avoid FK constraints
+      await connection.execute('DELETE FROM refresh_tokens');
+      await connection.execute('DELETE FROM financial_records');
+      await connection.execute('DELETE FROM users');
 
-    const adminId = insertUser.run('admin@example.com', passwordHash, 'Admin User', 'ADMIN').lastInsertRowid;
-    const analystId = insertUser.run('analyst@example.com', passwordHash, 'Analyst User', 'ANALYST').lastInsertRowid;
-    insertUser.run('viewer@example.com', passwordHash, 'Viewer User', 'VIEWER');
+      // Create Admin
+      const [adminResult] = await connection.execute(
+        'INSERT INTO users (email, password_hash, name, role) VALUES (?, ?, ?, ?)',
+        ['admin@example.com', passwordHash, 'Admin User', 'ADMIN']
+      );
+      const adminId = adminResult.insertId;
 
-    const insertRecord = db.prepare(
-      'INSERT INTO financial_records (amount, type, category, date, description, user_id) VALUES (?, ?, ?, ?, ?, ?)'
-    );
+      // Create Analyst
+      await connection.execute(
+        'INSERT INTO users (email, password_hash, name, role) VALUES (?, ?, ?, ?)',
+        ['analyst@example.com', passwordHash, 'Analyst User', 'ANALYST']
+      );
 
-    const records = [
-      { amount: 5000, type: 'INCOME', category: 'Salary', date: daysAgo(30), description: 'Monthly Salary', userId: adminId },
-      { amount: 1500, type: 'EXPENSE', category: 'Rent', date: daysAgo(25), description: 'Office Rent', userId: adminId },
-      { amount: 200, type: 'EXPENSE', category: 'Utilities', date: daysAgo(20), description: 'Internet Bill', userId: analystId },
-      { amount: 1200, type: 'INCOME', category: 'Consulting', date: daysAgo(15), description: 'Client A', userId: adminId },
-      { amount: 300, type: 'EXPENSE', category: 'Software', date: daysAgo(10), description: 'SaaS Subscriptions', userId: adminId },
-      { amount: 4800, type: 'INCOME', category: 'Salary', date: daysAgo(60), description: 'Previous Month Salary', userId: adminId },
-      { amount: 750, type: 'EXPENSE', category: 'Marketing', date: daysAgo(45), description: 'Ad Campaign', userId: adminId },
-      { amount: 2000, type: 'INCOME', category: 'Freelance', date: daysAgo(5), description: 'Project Payment', userId: analystId },
-    ];
+      // Create Viewer
+      await connection.execute(
+        'INSERT INTO users (email, password_hash, name, role) VALUES (?, ?, ?, ?)',
+        ['viewer@example.com', passwordHash, 'Viewer User', 'VIEWER']
+      );
 
-    for (const record of records) {
-      insertRecord.run(record.amount, record.type, record.category, record.date, record.description, record.userId);
+      // Seed records for Admin
+      const insertRecord = 'INSERT INTO financial_records (amount, type, category, date, description, user_id) VALUES (?, ?, ?, ?, ?, ?)';
+      
+      const records = [
+        [5000.00, 'INCOME', 'Salary', daysAgo(10), 'Monthly salary', adminId],
+        [1500.00, 'EXPENSE', 'Rent', daysAgo(9), 'Apartment rent', adminId],
+        [300.00, 'EXPENSE', 'Groceries', daysAgo(5), 'Weekly groceries', adminId],
+        [800.00, 'INCOME', 'Freelance', daysAgo(2), 'Web project', adminId],
+        [100.00, 'EXPENSE', 'Utilities', daysAgo(1), 'Electric bill', adminId],
+      ];
+
+      for (const record of records) {
+        await connection.execute(insertRecord, record);
+      }
+
+      await connection.commit();
+      logger.info('Database seeded successfully.');
+    } catch (err) {
+      await connection.rollback();
+      throw err;
+    } finally {
+      connection.release();
     }
-  });
-
-  runSeed();
-  logger.info('Database seeded successfully.');
+  } finally {
+    await pool.end();
+  }
 };
 
 seed().catch(err => {

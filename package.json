@@ -16,7 +16,6 @@
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
-    "better-sqlite3": "^11.5.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
@@ -24,6 +23,7 @@
     "helmet": "^8.0.0",
     "joi": "^17.13.3",
     "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.9.7",
     "pino": "^9.5.0",
     "pino-http": "^10.3.0",
     "swagger-jsdoc": "^6.2.8",

@@ -1,9 +1,9 @@
 import jwt from 'jsonwebtoken';
 import { env } from '../config/environment.js';
 import { UnauthorizedError } from '../utils/app-error.js';
-import db from '../config/database.js';
+import pool from '../config/database.js';
 
-export const authenticate = (req, res, next) => {
+export const authenticate = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -13,7 +13,8 @@ export const authenticate = (req, res, next) => {
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, env.jwtSecret);
 
-    const user = db.prepare('SELECT id, email, role, is_active FROM users WHERE id = ? AND deleted_at IS NULL').get(decoded.id);
+    const [users] = await pool.execute('SELECT id, email, role, is_active FROM users WHERE id = ? AND deleted_at IS NULL', [decoded.id]);
+    const user = users[0];
 
     if (!user) {
       throw new UnauthorizedError('User not found or deleted');

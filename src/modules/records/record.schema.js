@@ -1,4 +1,5 @@
 import Joi from 'joi';
+import { PAGINATION } from '../../utils/constants.js';
 
 export const createRecordSchema = Joi.object({
   amount: Joi.number().positive().required(),
@@ -26,6 +27,6 @@ export const queryRecordsSchema = Joi.object({
   dateFrom: Joi.date().iso(),
   dateTo: Joi.date().iso(),
   search: Joi.string(),
-  page: Joi.number().integer().min(1).default(1),
-  limit: Joi.number().integer().min(1).max(100).default(20)
+  page: Joi.number().integer().min(1).default(PAGINATION.DEFAULT_PAGE),
+  limit: Joi.number().integer().min(1).max(PAGINATION.MAX_LIMIT).default(PAGINATION.DEFAULT_LIMIT)
 });

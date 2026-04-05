@@ -8,7 +8,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Database (SQLite)
+# Legacy SQLite files (pre-migration)
 *.db
 *.db-shm
 *.db-wal

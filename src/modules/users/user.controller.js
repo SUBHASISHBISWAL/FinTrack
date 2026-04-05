@@ -3,7 +3,7 @@ import { sendSuccess } from '../../utils/response.js';
 
 export const getAllUsers = async (req, res, next) => {
   try {
-    const users = userService.getAllUsers();
+    const users = await userService.getAllUsers();
     sendSuccess(res, users);
   } catch (error) {
     next(error);
@@ -12,7 +12,7 @@ export const getAllUsers = async (req, res, next) => {
 
 export const getUserById = async (req, res, next) => {
   try {
-    const user = userService.getUserById(req.params.id);
+    const user = await userService.getUserById(req.params.id);
     sendSuccess(res, user);
   } catch (error) {
     next(error);
@@ -21,7 +21,7 @@ export const getUserById = async (req, res, next) => {
 
 export const updateUser = async (req, res, next) => {
   try {
-    const user = userService.updateUser(req.params.id, req.body);
+    const user = await userService.updateUser(req.params.id, req.body);
     sendSuccess(res, user, 'User updated successfully');
   } catch (error) {
     next(error);
@@ -30,7 +30,7 @@ export const updateUser = async (req, res, next) => {
 
 export const deleteUser = async (req, res, next) => {
   try {
-    const result = userService.deleteUser(req.params.id, req.user.id);
+    const result = await userService.deleteUser(req.params.id, req.user.id);
     sendSuccess(res, result, 'User deleted successfully');
   } catch (error) {
     next(error);
@@ -39,7 +39,7 @@ export const deleteUser = async (req, res, next) => {
 
 export const restoreUser = async (req, res, next) => {
   try {
-    const user = userService.restoreUser(req.params.id);
+    const user = await userService.restoreUser(req.params.id);
     sendSuccess(res, user, 'User restored successfully');
   } catch (error) {
     next(error);

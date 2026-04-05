@@ -21,7 +21,7 @@ export const login = async (req, res, next) => {
 
 export const refresh = async (req, res, next) => {
   try {
-    const data = authService.refreshAccessToken(req.body.refreshToken);
+    const data = await authService.refreshAccessToken(req.body.refreshToken);
     sendSuccess(res, data, 'Token refreshed');
   } catch (error) {
     next(error);
@@ -30,7 +30,7 @@ export const refresh = async (req, res, next) => {
 
 export const logout = async (req, res, next) => {
   try {
-    const data = authService.logoutUser(req.body.refreshToken);
+    const data = await authService.logoutUser(req.body.refreshToken);
     sendSuccess(res, data, 'Logged out successfully');
   } catch (error) {
     next(error);

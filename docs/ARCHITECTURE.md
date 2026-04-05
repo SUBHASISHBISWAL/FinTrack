@@ -45,8 +45,9 @@ Client Request
 │             └──────┬─────┘              │
 │                    ▼                    │
 │             ┌────────────┐              │
-│             │ better-     │              │
-│             │ sqlite3     │              │
+│             │   mysql2    │              │
+│             │ Connection  │              │
+│             │    Pool     │              │
 │             └─────────────┘              │
 │                                         │
 │          ┌──────────────┐               │
@@ -62,7 +63,7 @@ Client Request
 ```
 src/
 ├── config/
-│   ├── database.js          # SQLite connection singleton (WAL mode)
+│   ├── database.js          # MySQL connection pool configuration
 │   └── environment.js       # Env validation via Joi, exports config object
 │
 ├── database/
@@ -101,6 +102,7 @@ src/
 │
 ├── utils/
 │   ├── app-error.js         # Custom error hierarchy (AppError base class)
+│   ├── constants.js         # Structural application constants (pagination, dashboard limits)
 │   ├── logger.js            # Pino structured logger
 │   └── response.js          # Standardized response helpers
 │
@@ -133,30 +135,30 @@ This separation ensures:
 
 | Column | Type | Constraints |
 |---|---|---|
-| `id` | INTEGER | PRIMARY KEY, AUTOINCREMENT |
-| `email` | TEXT | UNIQUE, NOT NULL |
-| `password_hash` | TEXT | NOT NULL |
-| `name` | TEXT | NOT NULL |
-| `role` | TEXT | CHECK(VIEWER, ANALYST, ADMIN), DEFAULT VIEWER |
-| `is_active` | BOOLEAN | DEFAULT 1 |
-| `created_at` | DATETIME | DEFAULT CURRENT_TIMESTAMP |
-| `updated_at` | DATETIME | DEFAULT CURRENT_TIMESTAMP |
-| `deleted_at` | DATETIME | NULL (soft delete) |
+| `id` | INT | PRIMARY KEY, AUTO_INCREMENT |
+| `email` | VARCHAR(255) | UNIQUE, NOT NULL |
+| `password_hash` | VARCHAR(255) | NOT NULL |
+| `name` | VARCHAR(255) | NOT NULL |
+| `role` | ENUM | 'VIEWER', 'ANALYST', 'ADMIN' (DEFAULT 'VIEWER') |
+| `is_active` | TINYINT(1) | DEFAULT 1 |
+| `created_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP |
+| `updated_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP |
+| `deleted_at` | TIMESTAMP | NULL (soft delete) |
 
 ### `financial_records`
 
 | Column | Type | Constraints |
 |---|---|---|
-| `id` | INTEGER | PRIMARY KEY, AUTOINCREMENT |
-| `amount` | REAL | NOT NULL |
-| `type` | TEXT | CHECK(INCOME, EXPENSE), NOT NULL |
-| `category` | TEXT | NOT NULL |
-| `date` | DATETIME | NOT NULL |
+| `id` | INT | PRIMARY KEY, AUTO_INCREMENT |
+| `amount` | DECIMAL(12,2)| NOT NULL |
+| `type` | ENUM | 'INCOME', 'EXPENSE' |
+| `category` | VARCHAR(255) | NOT NULL |
+| `date` | DATE | NOT NULL |
 | `description` | TEXT | Nullable |
-| `user_id` | INTEGER | FK → users(id) |
-| `created_at` | DATETIME | DEFAULT CURRENT_TIMESTAMP |
-| `updated_at` | DATETIME | DEFAULT CURRENT_TIMESTAMP |
-| `deleted_at` | DATETIME | NULL (soft delete) |
+| `user_id` | INT | FK → users(id) ON DELETE SET NULL |
+| `created_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP |
+| `updated_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP |
+| `deleted_at` | TIMESTAMP | NULL (soft delete) |
 
 **Indexes:** `type`, `category`, `date`, `user_id`
 
@@ -164,19 +166,19 @@ This separation ensures:
 
 | Column | Type | Constraints |
 |---|---|---|
-| `id` | INTEGER | PRIMARY KEY, AUTOINCREMENT |
-| `user_id` | INTEGER | FK → users(id) |
-| `token` | TEXT | UNIQUE, NOT NULL |
-| `expires_at` | DATETIME | NOT NULL |
-| `created_at` | DATETIME | DEFAULT CURRENT_TIMESTAMP |
+| `id` | INT | PRIMARY KEY, AUTO_INCREMENT |
+| `user_id` | INT | FK → users(id) ON DELETE CASCADE |
+| `token` | VARCHAR(255) | UNIQUE, NOT NULL |
+| `expires_at` | TIMESTAMP | NOT NULL |
+| `created_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP |
 
 ### `_migrations`
 
 | Column | Type | Constraints |
 |---|---|---|
-| `version` | INTEGER | PRIMARY KEY |
-| `name` | TEXT | NOT NULL |
-| `applied_at` | DATETIME | DEFAULT CURRENT_TIMESTAMP |
+| `version` | INT | PRIMARY KEY |
+| `name` | VARCHAR(255) | NOT NULL |
+| `applied_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP |
 
 ---
 

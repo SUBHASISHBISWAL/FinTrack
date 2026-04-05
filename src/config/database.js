@@ -1,9 +1,15 @@
-import Database from 'better-sqlite3';
+import mysql from 'mysql2/promise';
 import { env } from './environment.js';
 
-const db = new Database(env.databaseUrl);
+const pool = mysql.createPool({
+  host: env.db.host,
+  port: env.db.port,
+  user: env.db.user,
+  password: env.db.password,
+  database: env.db.database,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+});
 
-// Enable WAL mode for better performance and concurrency
-db.pragma('journal_mode = WAL');
-
-export default db;
+export default pool;

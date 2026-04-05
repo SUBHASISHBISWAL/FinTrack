@@ -6,7 +6,7 @@ import swaggerJsdoc from 'swagger-jsdoc';
 
 import { env } from './config/environment.js';
 import { errorHandler } from './middleware/error-handler.js';
-import db from './config/database.js';
+import pool from './config/database.js';
 import logger from './utils/logger.js';
 import pinoHttp from 'pino-http';
 
@@ -105,10 +105,10 @@ const server = app.listen(PORT, () => {
 });
 
 // Graceful shutdown
-const gracefulShutdown = (signal) => {
+const gracefulShutdown = async (signal) => {
   logger.info(`${signal} received: closing HTTP server`);
-  server.close(() => {
-    db.close();
+  server.close(async () => {
+    await pool.end();
     logger.info('HTTP server and database connection closed');
     process.exit(0);
   });
