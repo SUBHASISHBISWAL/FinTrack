@@ -18,3 +18,21 @@ export const login = async (req, res, next) => {
     next(error);
   }
 };
+
+export const refresh = async (req, res, next) => {
+  try {
+    const data = authService.refreshAccessToken(req.body.refreshToken);
+    sendSuccess(res, data, 'Token refreshed');
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const logout = async (req, res, next) => {
+  try {
+    const data = authService.logoutUser(req.body.refreshToken);
+    sendSuccess(res, data, 'Logged out successfully');
+  } catch (error) {
+    next(error);
+  }
+};

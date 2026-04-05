@@ -1,5 +1,13 @@
 import db from '../../config/database.js';
-import { NotFoundError } from '../../utils/app-error.js';
+import { NotFoundError, ConflictError } from '../../utils/app-error.js';
+
+const UPDATABLE_RECORD_COLUMNS = ['amount', 'type', 'category', 'date', 'description'];
+
+const toSqlValue = (value) => {
+  if (value === undefined) return null;
+  if (value instanceof Date) return value.toISOString();
+  return value;
+};
 
 export const createRecord = (data, userId) => {
   const insert = db.prepare(`
@@ -7,7 +15,14 @@ export const createRecord = (data, userId) => {
     VALUES (?, ?, ?, ?, ?, ?)
   `);
   
-  const info = insert.run(data.amount, data.type, data.category, data.date, data.description, userId);
+  const info = insert.run(
+    data.amount,
+    data.type,
+    data.category,
+    toSqlValue(data.date),
+    toSqlValue(data.description),
+    userId
+  );
   return getRecordById(info.lastInsertRowid);
 };
 
@@ -67,36 +82,46 @@ export const getRecordById = (id) => {
 };
 
 export const updateRecord = (id, data) => {
-  // Ensure record exists
   getRecordById(id);
   
   const updates = [];
   const params = [];
   
-  for (const [key, value] of Object.entries(data)) {
-    if (value !== undefined) {
-      // Convert date object to string if necessary
-      const finalValue = value instanceof Date ? value.toISOString() : value;
-      updates.push(`${key} = ?`);
-      params.push(finalValue);
+  for (const column of UPDATABLE_RECORD_COLUMNS) {
+    if (data[column] !== undefined) {
+      updates.push(`${column} = ?`);
+      params.push(toSqlValue(data[column]));
     }
   }
   
-  if (updates.length > 0) {
-    updates.push("updated_at = CURRENT_TIMESTAMP");
-    params.push(id);
-    
-    const sql = `UPDATE financial_records SET ${updates.join(', ')} WHERE id = ? AND deleted_at IS NULL`;
-    db.prepare(sql).run(...params);
+  if (updates.length === 0) {
+    return getRecordById(id);
   }
+  
+  updates.push('updated_at = CURRENT_TIMESTAMP');
+  params.push(id);
+  
+  const sql = `UPDATE financial_records SET ${updates.join(', ')} WHERE id = ? AND deleted_at IS NULL`;
+  db.prepare(sql).run(...params);
   
   return getRecordById(id);
 };
 
 export const deleteRecord = (id) => {
-  // Ensure record exists
   getRecordById(id);
   
   db.prepare("UPDATE financial_records SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(id);
   return { id, deleted: true };
+};
+
+export const restoreRecord = (id) => {
+  const record = db.prepare('SELECT id, deleted_at FROM financial_records WHERE id = ?').get(id);
+  if (!record) {
+    throw new NotFoundError(`Financial record with id ${id} not found`);
+  }
+  if (!record.deleted_at) {
+    throw new ConflictError('Record is not deleted');
+  }
+  db.prepare("UPDATE financial_records SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(id);
+  return getRecordById(id);
 };

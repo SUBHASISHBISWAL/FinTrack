@@ -45,3 +45,12 @@ export const deleteRecord = async (req, res, next) => {
     next(error);
   }
 };
+
+export const restoreRecord = async (req, res, next) => {
+  try {
+    const record = recordService.restoreRecord(req.params.id);
+    sendSuccess(res, record, 'Record restored successfully');
+  } catch (error) {
+    next(error);
+  }
+};

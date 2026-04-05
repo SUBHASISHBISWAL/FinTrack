@@ -30,8 +30,17 @@ export const updateUser = async (req, res, next) => {
 
 export const deleteUser = async (req, res, next) => {
   try {
-    const result = userService.deleteUser(req.params.id);
+    const result = userService.deleteUser(req.params.id, req.user.id);
     sendSuccess(res, result, 'User deleted successfully');
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const restoreUser = async (req, res, next) => {
+  try {
+    const user = userService.restoreUser(req.params.id);
+    sendSuccess(res, user, 'User restored successfully');
   } catch (error) {
     next(error);
   }
