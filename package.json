@@ -12,7 +12,8 @@
     "dev": "nodemon src/server.js",
     "test": "jest",
     "db:migrate": "node src/database/migrate.js",
-    "db:seed": "node src/database/seed.js"
+    "db:seed": "node src/database/seed.js",
+    "docs:export": "node src/database/export-spec.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
